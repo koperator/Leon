@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Safety Vector Map Display</title>
+  <style>
+    body { margin: 0; padding: 0; }
+    canvas { display: block; background: #222; }
+  </style>
+</head>
+<body>
+  <!-- Canvas size based on map dimensions (20 columns x 15 rows) at 16px per tile -->
+  <canvas id="canvas" width="3200" height="2400"></canvas>
+  <script src="map.js"></script>
+  <script>
+    // Updated map interpretation:
+    // 1 = obstacle (displayed as black, occludes)
+    // 0 = standable (safety vector computed and colored)
+    // 'map' is now loaded from map.js
+
+    // Converts a normalized value in [0,1] to a two-digit hex string.
+    function toHex(value) {
+      const hex = Math.floor(value * 255).toString(16);
+      return hex.length === 1 ? "0" + hex : hex;
+    }
+
+    /**
+     * Converts a safety vector {x, y, z} into a hex color.
+     * x (left–right) and y (top–down) are remapped from [-1,1] to [0,1] so that 0 becomes 0.5.
+     * z (overall occlusion) is already in [0,1].
+     * R = left–right, G = top–down, B = overall occlusion.
+     */
+    function safetyVectorToHex(safetyVector) {
+      const r = (safetyVector.x + 1) / 2;
+      const g = (safetyVector.y + 1) / 2;
+      const b = safetyVector.z;
+      return "#" + toHex(r) + toHex(g) + toHex(b);
+    }
+
+    /**
+     * Casts a ray from (x, y) in a given angle until an obstacle is hit or maxRange is reached.
+     * Now, an obstacle is any cell with value 1.
+     * @param {number} x - Starting x coordinate.
+     * @param {number} y - Starting y coordinate.
+     * @param {number} angle - Angle in degrees (0° = east, 90° = north, etc.).
+     * @param {number} maxRange - Maximum ray distance.
+     * @param {number[][]} map - 2D grid (1 = obstacle, 0 = standable).
+     * @returns {number} - Distance from (x, y) to the obstacle (or maxRange if none encountered).
+     */
+    function castRay(x, y, angle, maxRange, map) {
+      const rad = angle * (Math.PI / 180);
+      const step = 0.2; // Adjust for resolution/performance.
+      let distance = 0;
+      while (distance < maxRange) {
+        const dx = x + distance * Math.cos(rad);
+        const dy = y - distance * Math.sin(rad); // y increases downward.
+        const ix = Math.floor(dx);
+        const iy = Math.floor(dy);
+        // Check for out-of-bounds.
+        if (iy < 0 || ix < 0 || iy >= map.length || ix >= map[0].length) break;
+        // Now, a cell with value 1 is an obstacle.
+        if (map[iy][ix] === 1) return distance;
+        distance += step;
+      }
+      return distance;
+    }
+
+    /**
+     * Computes a safety vector for the cell at (i, j) by casting rays in four cardinal groups.
+     * Uses an inverse-distance contribution: f(r) = 1/(1 + r).
+     * @param {number} i - Row index.
+     * @param {number} j - Column index.
+     * @param {number[][]} map - 2D map (1 = obstacle, 0 = standable).
+     * @param {Object} options - Configuration options.
+     * @returns {Object} - Safety vector {x, y, z}.
+     */
+    function computeSafetyVector(i, j, map, options) {
+      const { numRays, spread, maxRange } = options;
+      const groups = { north: 90, south: 270, east: 0, west: 180 };
+      const safety = { north: 0, south: 0, east: 0, west: 0 };
+
+      for (const [dir, centralAngle] of Object.entries(groups)) {
+        let sumContrib = 0;
+        for (let r = 0; r < numRays; r++) {
+          const offset = spread * ((r / (numRays - 1)) * 2 - 1);
+          const rayAngle = centralAngle + offset;
+          const distance = castRay(j + 0.5, i + 0.5, rayAngle, maxRange, map);
+          const contrib = 1 / (1 + distance);
+          sumContrib += contrib;
+        }
+        safety[dir] = sumContrib / numRays;
+      }
+
+      const vecX = safety.east - safety.west;
+      const vecY = safety.north - safety.south;
+      const deviationNorth = Math.abs(safety.north - 0.5);
+      const deviationSouth = Math.abs(safety.south - 0.5);
+      const deviationEast  = Math.abs(safety.east  - 0.5);
+      const deviationWest  = Math.abs(safety.west  - 0.5);
+      const occlusionRaw = (deviationNorth + deviationSouth + deviationEast + deviationWest) / 4;
+      const vecZ = occlusionRaw * 2;
+
+      return { x: vecX, y: vecY, z: vecZ };
+    }
+
+    /**
+     * Computes the safety color map for the entire map.
+     * For standable cells (0), computes the safety vector and converts it to a hex color.
+     * For obstacles (1), uses black.
+     * @param {number[][]} map - 2D game map.
+     * @param {Object} options - Options for ray-casting.
+     * @returns {string[][]} - 2D array of hex color strings.
+     */
+    function computeSafetyColorMap(map, options = {}) {
+      const config = {
+        numRays: options.numRays || 10,
+        spread: options.spread || 10,
+        maxRange: options.maxRange || 10,
+      };
+      const colorMap = [];
+      for (let i = 0; i < map.length; i++) {
+        const rowColors = [];
+        for (let j = 0; j < map[0].length; j++) {
+          if (map[i][j] === 1) {
+            rowColors.push("#000000");
+          } else {
+            const safetyVector = computeSafetyVector(i, j, map, config);
+            rowColors.push(safetyVectorToHex(safetyVector));
+          }
+        }
+        colorMap.push(rowColors);
+      }
+      return colorMap;
+    }
+
+    // Ensure map is loaded before rendering
+    window.onload = function() {
+      if (typeof map === 'undefined') {
+        console.error("Map data not loaded. Ensure map.js is in the same folder and loaded correctly.");
+        return;
+      }
+      const safetyColorMap = computeSafetyColorMap(map);
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const tileSize = 16;
+      for (let i = 0; i < map.length; i++) {
+        for (let j = 0; j < map[0].length; j++) {
+          ctx.fillStyle = safetyColorMap[i][j];
+          ctx.fillRect(j * tileSize, i * tileSize, tileSize, tileSize);
+          ctx.strokeStyle = "#333";
+          ctx.strokeRect(j * tileSize, i * tileSize, tileSize, tileSize);
+        }
+      }
+    };
+  </script>
+</body>
+</html>

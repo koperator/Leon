@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Top-Down Game with Map Texture (64x64 Map)</title>
+    <style>
+        canvas { border: 1px solid black; cursor: none; background: black; width: 1920px; height: 1280px; }
+        #ammo { position: absolute; top: 10px; left: 1310px; color: #A9A9A9; background: rgba(0, 0, 0, 0.7); padding: 10px; font-family: "PixelOperator", sans-serif; font-size: 48px; display: none; }
+        #grenades { position: absolute; top: 70px; left: 1310px; color: #A9A9A9; background: rgba(0, 0, 0, 0.7); padding: 10px; font-family: "PixelOperator", sans-serif; font-size: 48px; display: none; }
+        #kills { position: absolute; top: 130px; left: 1310px; color: #A9A9A9; background: rgba(0, 0, 0, 0.7); padding: 10px; font-family: "PixelOperator", sans-serif; font-size: 48px; display: none; }
+        #hp { position: absolute; top: 190px; left: 1310px; color: #A9A9A9; background: rgba(0, 0, 0, 0.7); padding: 10px; font-family: "PixelOperator", sans-serif; font-size: 48px; display: none; }
+        #armor { position: absolute; top: 250px; left: 1310px; color: #A9A9A9; background: rgba(0, 0, 0, 0.7); padding: 10px; font-family: "PixelOperator", sans-serif; font-size: 48px; display: none; }
+        #time { position: absolute; top: 310px; left: 1310px; color: #A9A9A9; background: rgba(0, 0, 0, 0.7); padding: 10px; font-family: "PixelOperator", sans-serif; font-size: 48px; display: none; }
+        #enemies { position: absolute; top: 370px; left: 1310px; color: #A9A9A9; background: rgba(0, 0, 0, 0.7); padding: 10px; font-family: "PixelOperator", sans-serif; font-size: 48px; display: none; }
+        @font-face {
+            font-family: "PixelOperator";
+            src: url("PixelOperator-Bold.ttf") format("truetype");
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ammo"></div>
+    <div id="grenades"></div>
+    <div id="kills">Kills: 0</div>
+    <div id="hp">HP: 100</div>
+    <div id="armor">Armor: 0</div>
+    <div id="time">Time: 0s</div>
+    <div id="enemies">Enemies: 1</div>
+    <!-- Load external scripts -->
+    <script src="map.js"></script>
+    <script src="pathfinding.js"></script>
+    <script src="projectiles.js"></script>
+    <script src="weapons.js"></script>
+    <script src="enemyAI.js"></script>
+    <script src="safety.js"></script>
+    <script src="safezones_out.js"></script>
+    <script src="spawns.js"></script>
+    <script src="grenade.js"></script>
+    <script src="grenade_physics.js"></script>
+    <script src="grenade_explosion.js"></script>
+    <script src="grenade_particles.js"></script>
+    <script src="player.js"></script>
+    <script src="blood.js"></script>
+    <script src="render.js"></script>
+    <script src="title.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>

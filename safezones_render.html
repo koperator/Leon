@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Safety Vector Map Display</title>
+  <style>
+    body { margin: 0; padding: 0; }
+    canvas { display: block; background: #222; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="320" height="240"></canvas>
+  <script src="map.js"></script>
+  <script>
+    // Updated map interpretation:
+    // 1 = obstacle (displayed as black, occludes)
+    // 0 = standable (safety vector computed and colored)
+    // 'map' is loaded from map.js
+
+    function toHex(value) {
+      const hex = Math.floor(value * 255).toString(16);
+      return hex.length === 1 ? "0" + hex : hex;
+    }
+
+    // New function to simplify 6-digit hex to 3-digit where possible
+    function simplifyHex(hex) {
+      const r = hex.slice(1, 3); // e.g., "7f"
+      const g = hex.slice(3, 5); // e.g., "7f"
+      const b = hex.slice(5, 7); // e.g., "00"
+      // Take the first digit of each pair for simplicity (approximation)
+      const rShort = r[0];
+      const gShort = g[0];
+      const bShort = b[0];
+      return `#${rShort}${gShort}${bShort}`;
+    }
+
+    function safetyVectorToHex(safetyVector) {
+      const r = (safetyVector.x + 1) / 2;
+      const g = (safetyVector.y + 1) / 2;
+      const b = safetyVector.z;
+      const fullHex = "#" + toHex(r) + toHex(g) + toHex(b);
+      return simplifyHex(fullHex);
+    }
+
+    function castRay(x, y, angle, maxRange, map) {
+      const rad = angle * (Math.PI / 180);
+      const step = 0.2;
+      let distance = 0;
+      while (distance < maxRange) {
+        const dx = x + distance * Math.cos(rad);
+        const dy = y - distance * Math.sin(rad);
+        const ix = Math.floor(dx);
+        const iy = Math.floor(dy);
+        if (iy < 0 || ix < 0 || iy >= map.length || ix >= map[0].length) break;
+        if (map[iy][ix] === 1) return distance;
+        distance += step;
+      }
+      return distance;
+    }
+
+    function computeSafetyVector(i, j, map, options) {
+      const { numRays, spread, maxRange } = options;
+      const groups = { north: 90, south: 270, east: 0, west: 180 };
+      const safety = { north: 0, south: 0, east: 0, west: 0 };
+
+      for (const [dir, centralAngle] of Object.entries(groups)) {
+        let sumContrib = 0;
+        for (let r = 0; r < numRays; r++) {
+          const offset = spread * ((r / (numRays - 1)) * 2 - 1);
+          const rayAngle = centralAngle + offset;
+          const distance = castRay(j + 0.5, i + 0.5, rayAngle, maxRange, map);
+          const contrib = 1 / (1 + distance);
+          sumContrib += contrib;
+        }
+        safety[dir] = sumContrib / numRays;
+      }
+
+      const vecX = safety.east - safety.west;
+      const vecY = safety.north - safety.south;
+      const deviationNorth = Math.abs(safety.north - 0.5);
+      const deviationSouth = Math.abs(safety.south - 0.5);
+      const deviationEast  = Math.abs(safety.east  - 0.5);
+      const deviationWest  = Math.abs(safety.west  - 0.5);
+      const occlusionRaw = (deviationNorth + deviationSouth + deviationEast + deviationWest) / 4;
+      const vecZ = occlusionRaw * 2;
+
+      return { x: vecX, y: vecY, z: vecZ };
+    }
+
+    function computeSafetyColorMap(map, options = {}) {
+      const config = {
+        numRays: options.numRays || 10,
+        spread: options.spread || 10,
+        maxRange: options.maxRange || 10,
+      };
+      const colorMap = [];
+      for (let i = 0; i < map.length; i++) {
+        const rowColors = [];
+        for (let j = 0; j < map[0].length; j++) {
+          if (map[i][j] === 1) {
+            rowColors.push("#000");
+          } else {
+            const safetyVector = computeSafetyVector(i, j, map, config);
+            rowColors.push(safetyVectorToHex(safetyVector));
+          }
+        }
+        colorMap.push(rowColors);
+      }
+      return colorMap;
+    }
+
+    function download(content, fileName, contentType) {
+      const a = document.createElement("a");
+      const file = new Blob([content], { type: contentType });
+      a.href = URL.createObjectURL(file);
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    window.onload = function() {
+      if (typeof map === 'undefined') {
+        console.error("Map data not loaded. Ensure map.js is in the same folder and loaded correctly.");
+        return;
+      }
+
+      const safetyColorMap = computeSafetyColorMap(map);
+
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      const tileSize = 16;
+      for (let i = 0; i < map.length; i++) {
+        for (let j = 0; j < map[0].length; j++) {
+          ctx.fillStyle = safetyColorMap[i][j];
+          ctx.fillRect(j * tileSize, i * tileSize, tileSize, tileSize);
+          ctx.strokeStyle = "#333";
+          ctx.strokeRect(j * tileSize, i * tileSize, tileSize, tileSize);
+        }
+      }
+
+      // Format the output to match the original map style
+      let jsContent = "const safeZones = [\n";
+      for (let i = 0; i < safetyColorMap.length; i++) {
+        const row = safetyColorMap[i].map(color => `"${color}"`).join(",");
+        jsContent += `  [${row}]${i < safetyColorMap.length - 1 ? "," : ""}\n`;
+      }
+      jsContent += "];";
+
+      download(jsContent, 'safezones_out.js', 'text/javascript');
+    };
+  </script>
+</body>
+</html>
